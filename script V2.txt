@@ -1,0 +1,527 @@
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  // Crea un nuevo menú en la hoja de cálculo con el nombre "Limpiar Planilla"
+  ui.createMenu('Actualizar precios')
+      // Agrega una opción al menú llamada "Limpiar Hoja" que llama a la función limpiarApp
+      .addItem('Actualizar', 'copiarDatos')
+      .addToUi();
+}
+
+
+function copiarDatos() {
+
+/////////////////////////////////////////////////////////////////////////////////////
+  
+  var archivoListaDeProveedoresID = "1Ko9ByIKRXbrykhsON-cpp6HfeJ4MuZB1SK4BVCYr2U8";
+
+/////////////////////////////////////////////////////////////////////////////////////
+
+  // Creo Diccionario de proveedores
+  var proveedores = crearDiccionarioProveedores(archivoListaDeProveedoresID);
+  console.log(proveedores);
+
+  // Creo variables de proveedores desde el diccionario de proveedores
+  crearVariablesDesdeDiccionario(proveedores);
+  console.log("variables de los proveedores creadas");
+
+  // Creo diccionario de variables globales
+  var variablesglobales = crearDiccionarioVariables(archivoListaDeProveedoresID);
+  console.log(variablesglobales);
+
+  // Inicializar variables globales desde el archivo principal de variables 
+  inicializarVariablesGlobalesDesdeDiccionario(variablesglobales);
+  console.log("variables globales inicializadas");
+  console.log("carp prov: " + carpetaProveedoresID);
+
+  /////// BUSCO EL ARCHIVO MAS RECIENTE DE CADA PROVEEDOR Y EL ARCHIVO MAS RECIENTE DE STOCK
+  console.log("Buscando archivos más recientes...");
+
+
+  //Encontrar archivo mas reciente de STOCK
+  var idDeArchivoContabilium = encontrarArchivoMasRecienteEnCarpeta(carpetaContabiliumID, "");
+  console.log("ID del archivo más reciente para Contabilium: " + idDeArchivoContabilium);
+  aplicarFormatoAArchivo(idDeArchivoContabilium);
+  console.log("Se cambió el formato de los numeros y porcentajes");
+
+// Encontrar archivo más reciente de cada PROVEEDOR
+// Variable para verificar si se encontró al menos un archivo para este proveedor
+var encontrado = false;
+
+// Itera sobre cada objeto proveedor
+for (var proveedor in proveedores) {
+  // Obtiene la lista de objetos proveedor para el proveedor actual
+  var listaProveedores = proveedores[proveedor];
+
+  // Itera sobre cada objeto proveedor
+  for (var i = 0; i < listaProveedores.length; i++) {
+    // Obtiene los datos del proveedor actual
+    var proveedorActual = listaProveedores[i];
+
+    // Llama a la función para encontrar el archivo más reciente
+    var archivoIDnum = encontrarArchivoMasRecienteEnCarpeta(carpetaProveedoresID, proveedorActual.nombreProveedor);
+
+    if (archivoIDnum != null) {
+      // Agrega el ID del archivo al objeto proveedor actual en el diccionario de proveedores
+      proveedorActual.archivoIDnum = archivoIDnum;
+
+      // Imprime el resultado en la consola
+      console.log("ID del archivo más reciente para " + proveedorActual.nombreProveedor + ": " + archivoIDnum);
+    } else {
+      // Si no se encontró ningún archivo para este proveedor, elimina el proveedor del diccionario
+      delete proveedores[proveedor];
+      console.log("No se encontraron archivos para el proveedor: " + proveedorActual.nombreProveedor);
+      console.log(proveedores);
+    }
+  }
+}
+
+
+
+
+
+/*
+
+  //////// COPIO LA HOJA DE STOCK MAS RECIENTE A LA HOJA DESTINO
+  console.log("Copiando la hoja de stock más reciente al archivo destino...");
+  copiarHojaDeArchivo(idDeArchivoContabilium, archivoDestinoID);
+
+  //////// APLICO FORMATO ORIGINAL DE % Y NUMEROS A LA HOJA DESTINO
+  console.log("Aplicando formato original de % y números al archivo destino...");
+  aplicarFormatoAArchivo(archivoDestinoID);
+
+  /////// ACTUALIZO todos los PRECIOS DE LOS PROVEEDORES
+  console.log("Actualizando todos los precios de los proveedores en el archivo destino...");
+  actualizarTodosLosPrecios(archivoDestinoID, proveedores);
+
+  /////// CREO ARCHIVO CON PRECIOS ACTUALIZADOS
+  console.log("Creando archivo con precios actualizados...");
+  crearArchivoPreciosActualizados(archivoDestinoID);
+
+  /////// LIMPIO ARCHIVOS CREADOS
+  console.log("Limpiando archivos creados...");
+  borrarArchivos(proveedores);
+  limpiarApp(archivoDestinoID);
+
+  /////// Mostrar cuadro de diálogo de finalización
+  Browser.msgBox("Finalizado", Browser.Buttons.OK);
+
+
+*/
+
+}
+
+
+
+
+
+
+
+////////////////////=====funciones=====////////////////////////
+
+function esArchivoExcel(archivo) {
+  console.log(archivo);
+  var tipoMIME = archivo.getMimeType();
+  return tipoMIME === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+         tipoMIME === "application/vnd.ms-excel";
+}
+
+//////////////////////////////////////////////////////////////
+
+function convertirExcelAGoogleSheet(archivoID) {
+  var archivoExcel = DriveApp.getFileById(archivoID);
+  var carpetaPadre = archivoExcel.getParents().next(); // Obtiene la carpeta padre del archivo original
+
+  var nuevoArchivo = {
+    title: archivoExcel.getName(),
+    mimeType: MimeType.GOOGLE_SHEETS
+  };
+
+  try {
+    var archivoConvertido = Drive.Files.insert(nuevoArchivo, archivoExcel, { convert: true });
+    var archivoConvertidoID = archivoConvertido.id;
+
+    // Agrega el archivo convertido a la misma carpeta que el archivo original
+    carpetaPadre.addFile(DriveApp.getFileById(archivoConvertidoID));
+
+    return archivoConvertidoID;
+  } catch (error) {
+    console.error("Error al convertir el archivo a Google Sheets:", error);
+    return null;
+  }
+}
+
+//////////////////////////////////////////////////////////////
+
+function encontrarArchivoMasRecienteEnCarpeta(carpetaID, palabraClave) {
+  var archivos = DriveApp.getFolderById(carpetaID).getFiles();
+  var nombreDeArchivoMasReciente = '';
+  var idDeArchivoMasReciente = '';
+
+  console.log("Buscando archivo más reciente en carpeta con ID: " + carpetaID);
+
+  while (archivos.hasNext()) {
+    var archivo = archivos.next();
+    console.log("Revisando archivo: " + archivo.getName());
+    if (palabraClave === "" || archivo.getName().toLowerCase().includes(palabraClave.toLowerCase())) {
+      console.log("El archivo coincide con la palabra clave o no se especificó ninguna.");
+      if (!nombreDeArchivoMasReciente || archivo.getLastUpdated() > DriveApp.getFileById(idDeArchivoMasReciente).getLastUpdated()) {
+        console.log("Encontrado un archivo más reciente.");
+        nombreDeArchivoMasReciente = archivo.getName();
+        idDeArchivoMasReciente = archivo.getId();
+      }
+    }
+  }
+
+  if (idDeArchivoMasReciente !== '') {
+    console.log("ID del archivo más reciente encontrado: " + idDeArchivoMasReciente);
+    if (esArchivoExcel(DriveApp.getFileById(idDeArchivoMasReciente))) {
+      console.log("El archivo es un archivo de Excel.");
+      return convertirExcelAGoogleSheet(idDeArchivoMasReciente);
+    } else {
+      console.log("El archivo no es un archivo de Excel.");
+      return idDeArchivoMasReciente;
+    }
+  } else {
+    console.log("No se encontró ningún archivo que coincida con la palabra clave.");
+    return null; 
+  }
+}
+
+/////////////////////////////////////////////////////
+
+function copiarHojaDeArchivo(origenID, destinoID) {
+  var origen = SpreadsheetApp.openById(origenID);
+  var destino = SpreadsheetApp.openById(destinoID);
+
+  console.log("Archivos abiertos correctamente.");
+
+  // Obtener la primera hoja del archivo de origen
+  var hojaOrigen = origen.getSheets()[0];
+  var nombreHojaOrigen = hojaOrigen.getName();
+  var rangoDatosHojaOrigen = hojaOrigen.getDataRange();
+  var datosHojaOrigen = rangoDatosHojaOrigen.getValues();
+
+  console.log("Obteniendo la primera hoja del archivo de origen: " + nombreHojaOrigen);
+
+  // Verificar si el archivo de destino tiene la misma hoja
+  var hojaDestino = destino.getSheetByName(nombreHojaOrigen);
+
+  if (hojaDestino) {
+    console.log("La hoja de destino ya existe.");
+    console.log("Limpiando la hoja de destino.");
+    hojaDestino.clear();
+  } else {
+    console.log("La hoja de destino no existe. Creando una nueva hoja.");
+    hojaDestino = destino.insertSheet(nombreHojaOrigen);
+  }
+
+  // Copiar los datos de la hoja de origen a la hoja de destino
+  var rangoDestino = hojaDestino.getRange(1, 1, datosHojaOrigen.length, datosHojaOrigen[0].length);
+  rangoDestino.setValues(datosHojaOrigen);
+
+  console.log("La hoja de " + nombreHojaOrigen + " del archivo de origen ha sido copiada al archivo de destino.");
+
+
+  // Eliminar todas las hojas adicionales en el archivo de destino
+  var hojasDestino = destino.getSheets();
+  for (var i = 0; i < hojasDestino.length; i++) {
+    if (hojasDestino[i].getName() !== nombreHojaOrigen) {
+      destino.deleteSheet(hojasDestino[i]);
+    }
+  }
+
+  console.log("Eliminando hojas adicionales en el archivo de destino si es necesario.");
+}
+
+//////////////////////////////////
+
+function aplicarFormatoAArchivo(archivoID) {
+  var archivo = SpreadsheetApp.openById(archivoID);
+  var hoja = archivo.getSheets()[0]; // Obtener la primera hoja del archivo
+
+  // Aplicar formato de porcentaje a la columna I
+  var columnaPorcentaje = hoja.getRange("I:I");
+  columnaPorcentaje.setNumberFormat("0.00%");
+  columnaPorcentaje.setHorizontalAlignment("right");
+
+  // Aplicar formato de número con separador de miles y decimales a las columnas F y J
+  var columnaNumeroF = hoja.getRange("F:F");
+  columnaNumeroF.setNumberFormat("#,##0.00");
+  columnaNumeroF.setHorizontalAlignment("right");
+
+  var columnaNumeroJ = hoja.getRange("J:J");
+  columnaNumeroJ.setNumberFormat("#,##0.00");
+  columnaNumeroJ.setHorizontalAlignment("right");
+
+  console.log("Se ha aplicado el formato correctamente al archivo con ID: " + archivoID);
+}
+
+
+////////////////////////////////////////
+
+function actualizarTodosLosPrecios(archivoDestinoID, proveedores) {
+  console.log("estoy dentro de la funcion actualizar todos los precios");
+  // Iterar sobre las claves del diccionario proveedores
+  for (var proveedorNombre in proveedores) {
+    var proveedor = proveedores[proveedorNombre];
+    // Iterar sobre cada objeto proveedor dentro de la clave
+    for (var i = 0; i < proveedor.length; i++) {
+      var proveedorInfo = proveedor[i];
+      // Extraer la información necesaria del proveedor
+
+      // Obtén el nombre de la variable del proveedorInfo.archivoID
+      var proveedorArchivoID = proveedorInfo.archivoIDnum;
+      var hojaProveedorNombre = proveedorInfo.hojaNombre;
+      var columnaCodigoProveedor = proveedorInfo.columnaCodigoProveedor;
+      var columnaPrecioProveedor = proveedorInfo.columnaPrecioProveedor;
+      
+      // Aquí puedes usar la información del proveedor para hacer lo que necesites, como actualizar precios en el archivo destino
+      console.log("Proveedor: " + proveedorNombre);
+      console.log("Archivo ID: " + proveedorArchivoID);
+      console.log("Hoja Nombre: " + hojaProveedorNombre);
+      console.log("Columna Código Proveedor: " + columnaCodigoProveedor);
+      console.log("Columna Precio Proveedor: " + columnaPrecioProveedor);
+      
+      // Llamar a una función que realice alguna acción con la información del proveedor, como actualizar precios en el archivo destino
+      console.log(proveedorArchivoID);
+      actualizarPrecios(archivoDestinoID,proveedorNombre,proveedorArchivoID, hojaProveedorNombre, columnaCodigoProveedor, columnaPrecioProveedor);
+    }
+  }
+}
+
+
+
+////////////////////////////////////////
+
+function actualizarPrecios(archivoDestinoID, proveedorNombre, proveedorArchivoID, hojaProveedorNombre, columnaCodigoProveedor, columnaPrecioProveedor) {
+
+  var indiceColumnaCodigoProveedor = columnaCodigoProveedor.toUpperCase().charCodeAt(0) - 65;
+  var indiceColumnaPrecioProveedor = columnaPrecioProveedor.toUpperCase().charCodeAt(0) - 65; // Corregido aquí
+  var codigoEncontrado = false; // Variable para verificar si se encontró el código
+  
+  // Abrir el archivo destino
+  var archivoDestino = SpreadsheetApp.openById(archivoDestinoID);
+  var hojaDestino = archivoDestino.getSheets()[0]; // Suponiendo que la hoja de destino es la primera
+
+  // Obtener los datos del archivo destino
+  var dataDestino = hojaDestino.getDataRange().getValues();
+
+  // Abrir el archivo del proveedor
+  var proveedorArchivo = SpreadsheetApp.openById(proveedorArchivoID);
+  var hojaProveedor = proveedorArchivo.getSheetByName(hojaProveedorNombre);
+
+  // Obtener los datos del proveedor
+  var dataProveedor = hojaProveedor.getDataRange().getValues();
+
+  // Recorrer la columna de códigos del archivo destino
+  for (var i = 0; i < dataDestino.length; i++) {
+    var codigoDestino = dataDestino[i][1]; // Código en la columna B del archivo destino
+
+    // Buscar el código en el archivo del proveedor
+    for (var j = 0; j < dataProveedor.length; j++) {
+      var codigoProveedor = dataProveedor[j][indiceColumnaCodigoProveedor];
+
+      if (codigoProveedor === codigoDestino) {
+        var precioProveedor = dataProveedor[j][indiceColumnaPrecioProveedor];
+        hojaDestino.getRange(i + 1, 6).setValue(precioProveedor); // Actualizamos el precio en la columna F del archivo destino
+        codigoEncontrado = true; // Se encontró el código        
+        break; // Salimos del bucle interno una vez que encontramos el código
+      }
+
+      // Verificar si el código no se encontró
+      //if (!codigoEncontrado) {
+      
+      //   console.log("El código "+codigoDestino+" no se encontró en ninguno de los proveedores.");
+      //}
+  }
+}}
+
+/////////////////////////////////////////////////
+
+function crearArchivoPreciosActualizados(origenID) {
+  var origen = SpreadsheetApp.openById(origenID);
+  var carpetaPadre = DriveApp.getFileById(origenID).getParents().next(); // Obtener la carpeta padre del archivo original
+
+  // Crear un nuevo archivo con nombre "nuevo"
+  var nuevoArchivo = SpreadsheetApp.create("nuevo");
+  var nuevoArchivoID = nuevoArchivo.getId(); // Obtener el ID del nuevo archivo
+
+  // Obtener la fecha y hora de creación del nuevo archivo y cambiar su nombre
+  var nombreNuevoArchivo = obtenerFechaHoraCreacion(nuevoArchivoID) + "-actualizacion-de-precios";
+  nuevoArchivo.setName(nombreNuevoArchivo);
+
+  // Copiar la hoja del archivo de origen al nuevo archivo
+  var hojaOrigen = origen.getSheets()[0]; // Obtener la primera hoja del archivo de origen
+  var nombreHojaOrigen = hojaOrigen.getName(); // Nombre de la hoja de origen
+  var datosHojaOrigen = hojaOrigen.getDataRange().getValues(); // Obtener los datos de la hoja de origen
+
+  var hojaDestino = nuevoArchivo.getSheetByName(nombreHojaOrigen); // Verificar si el nuevo archivo tiene la misma hoja
+  if (!hojaDestino) {
+    hojaDestino = nuevoArchivo.insertSheet(nombreHojaOrigen); // Insertar una nueva hoja si no existe
+  }
+
+  hojaDestino.getRange(1, 1, datosHojaOrigen.length, datosHojaOrigen[0].length).setValues(datosHojaOrigen); // Copiar los datos de la hoja de origen al nuevo archivo
+
+  var hojaABorrar=nuevoArchivo.getSheetByName("Hoja 1");
+  nuevoArchivo.deleteSheet(hojaABorrar); //Borrar hoja 1 del archivo final
+
+  aplicarFormatoAArchivo(nuevoArchivoID) //aplica formato a la hoja copiada porque viene sin formato
+
+
+  // Mover el nuevo archivo a la carpeta del archivo original
+  var destino = DriveApp.getFileById(nuevoArchivoID); // Obtener el objeto de archivo del nuevo archivo
+  carpetaPadre.addFile(destino); // Agregar el nuevo archivo a la carpeta padre del archivo original
+  DriveApp.getRootFolder().removeFile(destino); // Eliminar el archivo de la carpeta raíz
+
+  // Registro de eventos
+  console.log("La hoja de " + nombreHojaOrigen + " del archivo de origen ha sido copiada a un nuevo archivo con el nombre " + nombreNuevoArchivo);
+}
+
+///////////////////
+function obtenerFechaHoraCreacion(idArchivo) {
+  var archivo = DriveApp.getFileById(idArchivo); // Obtener el objeto de archivo
+  var marcaTiempoCreacion = archivo.getDateCreated(); // Obtener la marca de tiempo de creación del archivo
+  var fechaCreacion = new Date(marcaTiempoCreacion); // Convertir la marca de tiempo en un objeto de fecha
+  var horaCreacionFormato = ("0" + fechaCreacion.getHours()).slice(-2) + "-" + ("0" + fechaCreacion.getMinutes()).slice(-2); // Formatear la hora de creación en HH-mm
+  return Utilities.formatDate(fechaCreacion, Session.getScriptTimeZone(), "yyyy-MM-dd") + "-" + horaCreacionFormato; // Formatear la fecha y hora de creación
+}
+
+////////////////////
+function borrarArchivos(proveedores) {
+  // Iterar sobre cada proveedor en el diccionario
+  for (var proveedor in proveedores) {
+    // Obtener la lista de archivos del proveedor actual
+    var archivosProveedor = proveedores[proveedor];
+    
+    // Iterar sobre cada objeto de archivo del proveedor actual
+    for (var i = 0; i < archivosProveedor.length; i++) {
+      var archivoID = archivosProveedor[i].archivoID;
+      
+      // Verificar si el archivoID es válido
+      if (this[archivoID]) {
+        try {
+          // Eliminar el archivo utilizando el archivoID
+          DriveApp.getFileById(archivoID).setTrashed(true);
+          console.log("Archivo con ID " + archivoID + " eliminado.");
+        } catch (error) {
+          console.log("Error al eliminar el archivo con ID " + archivoID + ": " + error);
+        }
+      }
+    }
+  }
+}
+
+/////////////////////////
+function crearDiccionarioProveedores(idArchivo) {
+  var hoja = SpreadsheetApp.openById(idArchivo).getActiveSheet();
+  var datos = hoja.getRange("A:F").getValues(); // Suponiendo que la información está en las columnas A a F
+  
+  var proveedores = {};
+  
+  // Recorre los datos y crea el diccionario de proveedores
+  for (var i = 1; i < datos.length; i++) { // Empezamos desde 1 para omitir la fila de encabezados
+    var nombreProveedor = datos[i][0];
+    
+    // Verifica si el proveedor ya existe en el diccionario
+    if (!proveedores[nombreProveedor]) {
+      // Si el proveedor no existe, creamos un nuevo array y lo agregamos al diccionario
+      proveedores[nombreProveedor] = [];
+    }
+    
+    // Agrega la información del proveedor al array asociado a la clave en el diccionario
+    proveedores[nombreProveedor].push({
+      nombreProveedor: nombreProveedor,
+      archivoID: datos[i][1], // Columna B
+      hojaNombre: datos[i][2], // Columna C
+      columnaCodigoProveedor: datos[i][3], // Columna D
+      columnaPrecioProveedor: datos[i][4] // Columna E
+    });
+  }
+  
+  // Elimina cualquier entrada vacía en el diccionario
+  delete proveedores[''];
+
+  // Retorna el diccionario de proveedores
+  return proveedores;
+}
+
+//////////////////////////////////////////////////7
+
+// Función para crear variables a partir del diccionario de proveedores
+function crearVariablesDesdeDiccionario(proveedores) {
+  // Conjunto para realizar un seguimiento de los proveedores procesados
+  var proveedoresProcesados = new Set();
+
+  // Iterar sobre las claves del diccionario
+  for (var proveedor in proveedores) {
+    // Verificar si el proveedor ya ha sido procesado
+    if (!proveedoresProcesados.has(proveedor)) {
+      // Iterar sobre cada objeto proveedor dentro de la clave actual
+      for (var i = 0; i < proveedores[proveedor].length; i++) {
+        // Crear la variable usando el archivoID como nombre y asignarle una cadena vacía
+        eval('var ' + proveedores[proveedor][i].archivoID + ' = "";');
+      }
+      // Agregar el proveedor actual al conjunto de proveedores procesados
+      proveedoresProcesados.add(proveedor);
+    }
+  }
+}
+
+////////////////////////////////////////////
+
+function crearDiccionarioVariables(idArchivo) {
+  var hoja = SpreadsheetApp.openById(idArchivo).getSheetByName("Variables globales");
+  var datos = hoja.getRange("B:C").getValues(); // Suponiendo que la información está en las columnas B y C
+  
+  var variables = {};
+  
+  // Recorre los datos y crea el diccionario de variables
+  for (var i = 1; i < datos.length; i++) { // Empezamos desde 1 para omitir la fila de encabezados
+    var nombreVariable = datos[i][0];
+    
+    // Verificar si el valor de la variable está vacío
+    var valorVariable = datos[i][1];
+    if (valorVariable !== "") {
+      // Agregar la variable y su valor al diccionario solo si el valor no está vacío
+      variables[nombreVariable] = valorVariable;
+    }
+  }
+  
+  // Retorna el diccionario de variables
+  return variables;
+}
+
+///////////////////////////////////////////
+
+
+function inicializarVariablesGlobalesDesdeDiccionario(diccionario) {
+  for (var clave in diccionario) {
+    if (diccionario.hasOwnProperty(clave)) {
+      // Crea una variable global con el nombre de la clave y le asigna el valor correspondiente del diccionario
+      this[clave] = diccionario[clave];
+    }
+  }
+}
+
+///////////////////////////////////////////////7
+
+function limpiarApp(archivoDestinoID) {
+  var archivoDestino = SpreadsheetApp.openById(archivoDestinoID);
+  var hojasDestino = archivoDestino.getSheets();
+
+  // Eliminar todas las hojas excepto una
+  for (var i = hojasDestino.length - 1; i > 0; i--) {
+    archivoDestino.deleteSheet(hojasDestino[i]);
+  }
+
+  // Obtener la única hoja que quedó después de eliminar las otras
+  var hojaDestino = archivoDestino.getSheets()[0];
+
+  // Limpiar los datos de la hoja
+  hojaDestino.clear();
+
+  // Renombrar la hoja a "Hoja 1"
+  hojaDestino.setName("Hoja 1");
+
+  console.log("Se ha limpiado la hoja y se ha renombrado como 'Hoja 1'.");
+}
