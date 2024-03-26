@@ -1,0 +1,239 @@
+'''
+
+NO FUNCIONA BIEN !!!!!!!!!!
+
+
+
+
+
+
+
+
+En esta version:
+
+recolecta EN LISTAS por cada objeto que pasa:
+- si choco o no
+- si salto o no
+- distancia entre el obstaculo y el dino al momento del salto (si no saltó guarda 0)
+- velocidad del obstaculo
+
+Velocidad del obstaculo random
+Ventana mas chica
+
+Le digo cuantos obstaculos o vueltas tiene que dar el juego
+cuando llega al limite, cierra el juego y guarda en un archivo aparte
+
+CORRECION NUEVA:
+EL ARCHIVO ahora pasa a tener en el nombre la fecha, la hora y las vueltas
+(asi no se sobreescriben)
+
+
+NUEVO!!!
+El dino salta solo. Recolecta los datos y termina.
+
+'''
+
+import pygame
+import sys
+import random
+import datetime
+import time 
+
+# Dimensiones de la pantalla
+WIDTH, HEIGHT = 450, 200
+
+# Colores
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+
+# Tamaño del dinosaurio y del obstáculo
+DINO_SIZE = 30
+OBSTACLE_SIZE = 30
+
+# Posición inicial del dinosaurio y del obstáculo
+DINO_INITIAL_POS = (50, HEIGHT - DINO_SIZE)
+OBSTACLE_INITIAL_POS = (WIDTH, HEIGHT - OBSTACLE_SIZE)
+
+# Velocidad del juego y del obstáculo
+GAME_SPEED = 10
+OBSTACLE_SPEED = 10
+
+# Cantidad de obstaculos
+obstaculos = 0
+colisiones = 0
+
+listaobst = []
+listacol = []
+listasalto=[]
+listadist=[]
+listavel=[]
+
+VUELTAS=5
+
+
+def main():
+    global obstaculos, colisiones
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Dino Game")
+
+    dino_rect = pygame.Rect(DINO_INITIAL_POS, (DINO_SIZE, DINO_SIZE))
+    obstacle_rect = pygame.Rect(OBSTACLE_INITIAL_POS, (OBSTACLE_SIZE, OBSTACLE_SIZE))
+
+    clock = pygame.time.Clock()
+
+###############
+    last_jump_time = time.time()  # Para controlar el tiempo del último salto
+###############    
+
+    dino_jump = False  # Variable para controlar el salto del dinosaurio
+
+    while obstaculos < VUELTAS:  # Terminar el juego cuando se alcanza el recuento de obstáculos
+
+ ################# HACER SI APRETA BARRA ESPACIADORA (SALTAR)       
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+                '''
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE and dino_rect.bottom == HEIGHT:
+                    dino_jump = True
+                    if dino_jump:
+                        listasalto.append("si salto")
+                        print(listasalto)
+                        #listadist.append(5) #SOLO PARA PROBAR
+                        #print(listadist)
+
+##################### Calcula la distancia horizontal entre el dinosaurio y el obstáculo
+                        distance = obstacle_rect.left - dino_rect.right
+                        listadist.append(distance)
+                        print(listadist)
+##########################
+                    #else:
+                    #    listasalto.append("no salto")
+                    #    print(listasalto)
+'''
+
+        screen.fill(WHITE)
+#############################################################
+
+        # Control de salto aleatorio
+        current_time = time.time()
+        if current_time - last_jump_time > random.randint(1,5 ):  # Salta cada 1 a 5 segundos en promedio
+            if dino_rect.bottom == HEIGHT:  # Verifica si el dinosaurio está cerca del suelo antes de saltar
+                dino_jump = True
+
+                #####################            
+                listasalto.append("si salto")
+                print(listasalto)
+                ##################### Calcula la distancia horizontal entre el dinosaurio y el obstáculo
+                distance = obstacle_rect.left - dino_rect.right
+                listadist.append(distance)
+                print(listadist)
+                ##########################
+
+                last_jump_time = current_time
+
+
+        # Movimiento del dinosaurio
+        if dino_jump:
+            if dino_rect.bottom >= HEIGHT - 100:
+                dino_rect.y -= 20
+
+            else:
+                dino_jump = False
+
+                    #else:
+                    #    listasalto.append("no salto")
+                    #    print(listasalto)
+
+        else:
+            if dino_rect.bottom < HEIGHT:
+                dino_rect.y += 10
+
+        # Movimiento del obstáculo
+################### Asigna un número aleatorio entre 20 y 50 a la variable OBSTACLE_SPEED
+        OBSTACLE_SPEED = random.randint(5, 15)
+        obstacle_rect.x -= OBSTACLE_SPEED  # Desplaza el obstáculo hacia la izquierda según la velocidad del juego
+
+##################### HACER CUANDO NO COLISIONO EL OBSTACULO
+        
+        # Verifica si el obstáculo ha pasado completamente fuera de la pantalla por la izquierda
+        if obstacle_rect.right < 0:
+            obstacle_rect.left = WIDTH  # Si es así, reposiciona el obstáculo completamente a la derecha de la pantalla
+            # Restablece la posición vertical del obstáculo para que esté alineado con el suelo
+            obstacle_rect.top = HEIGHT - OBSTACLE_SIZE
+            obstaculos += 1  # Incrementa el contador de obstáculos pasados
+            listaobst.append(1)
+            print(listaobst)
+            # Incrementa el contador de colisiones
+            colisiones += 0
+            listacol.append("no choco")
+            print(listacol)
+            
+            listavel.append(OBSTACLE_SPEED)
+            print(listavel)
+
+ ##########################################3           
+
+        # Dibuja el dinosaurio y el obstáculo
+        pygame.draw.rect(screen, BLACK, dino_rect)
+        pygame.draw.rect(screen, RED, obstacle_rect)
+
+        # Dibuja las vidas
+        font = pygame.font.Font(None, 36)
+        text = font.render(f"Obstaculo numero: {obstaculos}, Colisiones: {colisiones}", True, BLACK)
+        screen.blit(text, (10, 10))
+
+
+################# HACER CUANDO SI CHOCA CON EL OBSTACULO
+        
+        # Verifica si hay colisión entre el rectángulo del dinosaurio y el rectángulo del obstáculo
+        if dino_rect.colliderect(obstacle_rect):
+            # Comprueba si el dinosaurio está en el suelo (altura máxima) para considerar una colisión válida
+            if dino_rect.bottom == HEIGHT:
+                # Si el dinosaurio colisiona con el obstáculo, mueve el obstáculo fuera de la pantalla
+                # y restablece su posición vertical alineada con el suelo
+                obstacle_rect.left = WIDTH
+                obstacle_rect.top = HEIGHT - OBSTACLE_SIZE
+                # Incrementa el contador de obstáculos pasados
+                obstaculos += 1
+                listaobst.append(1)
+                print(listaobst)
+                # Incrementa el contador de colisiones
+                colisiones += 1
+                listacol.append("choco")
+                print(listacol)
+                listavel.append(OBSTACLE_SPEED)
+                print(listavel)
+
+                if len(listasalto)<len(listacol):
+                    listasalto.append("no salto")
+                    print(listasalto)
+                    listadist.append(0)
+                    print(listadist)
+######################################                
+
+        pygame.display.flip()
+        clock.tick(GAME_SPEED)
+
+        
+    guardar_listas()  # Llamar a la función para guardar las listas al salir del bucle
+
+def guardar_listas():
+    current_time = datetime.datetime.now().strftime("%y%m%d%H%M%S")
+    filename = f"datos_obstaculos_{current_time}_VUELTAS_{VUELTAS}.py"
+    with open(filename, "w") as f:
+        f.write("listaobst = " + str(listaobst) + "\n")
+        f.write("listacol = " + str(listacol) + "\n")
+        f.write("listasalto = " + str(listasalto) + "\n")
+        f.write("listadist = " + str(listadist) + "\n")
+        f.write("listavel = " + str(listavel) + "\n")
+
+if __name__ == "__main__":
+    main()
+
+
+

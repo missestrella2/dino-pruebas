@@ -1,3 +1,9 @@
+'''
+ juego del dinosaurio de google sencillo hecho por chatgpt
+
+'''
+
+
 ## BY CHATGPT
 
 import pygame  # Importar la biblioteca pygame para crear el juego

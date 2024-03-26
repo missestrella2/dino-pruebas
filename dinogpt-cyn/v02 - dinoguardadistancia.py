@@ -1,15 +1,18 @@
+'''
+este codigo es para recoger datos
 
-######### OJO
+toma la distancia entre el dino y el objeto mas cercano cuando apreto la barra espaciadora
 
-####### este codigo lo estoy trabajando, aun no funciona bien
+y le agrego que no cierre el juego al colisionar
+
+'''
+
 
 import pygame
 import random
 
-# Inicializar pygame
 pygame.init()
 
-# Definir constantes
 SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 200
 GROUND_HEIGHT = 50
@@ -21,12 +24,10 @@ OBSTACLE_SPEED = 5
 MIN_OBSTACLE_INTERVAL = 700
 MAX_OBSTACLE_INTERVAL = 3500
 
-# Definir colores
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 
-# Clase del dinosaurio
 class Dinosaur(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -52,7 +53,6 @@ class Dinosaur(pygame.sprite.Sprite):
         if self.on_ground:
             self.velocity_y = JUMP_FORCE
 
-# Clase del obstáculo
 class Obstacle(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -65,7 +65,6 @@ class Obstacle(pygame.sprite.Sprite):
     def update(self):
         self.rect.x -= OBSTACLE_SPEED
 
-# Clase del juego
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -75,8 +74,8 @@ class Game:
         self.dinosaur = Dinosaur()
         self.all_sprites.add(self.dinosaur)
         self.next_obstacle_time = 0
-        self.jump_distances = []  # Array para almacenar las distancias al saltar
-        self.collision_data = []  # Array para almacenar los datos de colisión
+        self.closest_distance = float('inf')  # Inicializamos con una distancia muy grande
+        self.distances = []  # Lista para almacenar las distancias
 
     def run(self):
         running = True
@@ -88,7 +87,22 @@ class Game:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_SPACE:
                         self.dinosaur.jump()
-                        self.record_jump_distance()  # Llamar a la función para registrar la distancia al saltar
+
+##############################################################################
+
+                        # Calcular la distancia entre el dinosaurio y el obstáculo más cercano a la derecha
+                        self.closest_distance = float('inf')  # Restablecer la distancia más cercana
+                        for obstacle in self.obstacles:
+                            distance = obstacle.rect.left - self.dinosaur.rect.right
+                            if distance < self.closest_distance and distance > 0:  # Solo considerar obstáculos a la derecha
+                                self.closest_distance = distance
+                        # Guardar la distancia recién calculada solo si es finita (hay un obstáculo a la derecha)
+                        if self.closest_distance != float('inf'):
+                            self.distances.append(self.closest_distance)
+                            print("Distancia recogida:", self.distances)
+
+
+##############################################################################
 
             self.all_sprites.update()
 
@@ -100,33 +114,17 @@ class Game:
                 self.all_sprites.add(obstacle)
                 self.obstacles.add(obstacle)
 
-                self.record_collision()  # Llamar a la función para registrar la colisión
+            if pygame.sprite.spritecollideany(self.dinosaur, self.obstacles):
+                #running = False
+                
+                pass
 
             self.screen.fill(WHITE)
             self.all_sprites.draw(self.screen)
             pygame.display.flip()
 
-            # Imprimir los datos recopilados en cada iteración
-            print("Distancias al saltar:", self.jump_distances)
-            print("Datos de colisión:", self.collision_data)
-
         pygame.quit()
 
-    def record_jump_distance(self):
-        for obstacle in self.obstacles:
-            if obstacle.rect.left > self.dinosaur.rect.right:  # Verificar que el obstáculo está delante del dinosaurio
-                distance = obstacle.rect.left - self.dinosaur.rect.right
-                self.jump_distances.append(distance)
-                break  # Salir del bucle después de guardar una distancia
-
-    def record_collision(self):
-        # Verificar colisión y registrar el resultado en el array
-        if pygame.sprite.spritecollideany(self.dinosaur, self.obstacles):
-            self.collision_data.append(1)
-        else:
-            self.collision_data.append(0)
-
-# Iniciar el juego
 if __name__ == "__main__":
     game = Game()
     game.run()
